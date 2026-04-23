@@ -6,8 +6,9 @@
  *   pnpm run env:sync:pull
  *   pnpm run env:sync:pull -- --all
  *   pnpm run env:sync:pull -- <dev|preview|prod> [--snapshot-only]
- *   pnpm run env:sync:push -- <dev|preview|prod> [--yes] [--from-sync]
- *   pnpm run env:sync:push -- --all [--yes] [--from-working]
+ *   pnpm run env:sync:push -- <dev|preview|prod> [--yes] [--from-sync] [convex]
+ *   pnpm run env:sync:push -- --all [--yes] [--from-working] [convex]
+ *   pnpm run env:sync:push -- … [--convex-only]   (same as trailing `convex`)
  *   pnpm run env:sync:push:cli
  *   pnpm run env:sync:clear [-- --dry-run]
  */
@@ -36,10 +37,14 @@ Usage:
                         Non-interactive preset (same pairing as before).
 
   pnpm run env:sync:push -- <dev|preview|prod>
+  pnpm run env:sync:push -- <dev|preview|prod> convex
   pnpm run env:sync:push -- --all
+  pnpm run env:sync:push -- --all convex
                         Push dev, then preview, then prod. Default: each reads its .env.sync.* snapshot
                         (same files as env:sync:pull -- --all). Each snapshot needs Convex routing
                         (CONVEX_DEPLOY_KEY and/or NEXT_PUBLIC_CONVEX_URL).
+
+  Trailing \`convex\` or flag \`--convex-only\`: run \`convex env set\` only — no Vercel CLI (faster).
 
   pnpm run env:sync:push:cli
                         Interactive push: choose targets, from-sync vs working, Vercel sensitive, --yes.
@@ -57,6 +62,8 @@ Usage:
 
   --yes, -y         (push only) Skip drift / local-change confirmations.
 
+  --convex-only     (push only) Same as trailing \`convex\`: Convex only, skip Vercel.
+
   --snapshot-only   (pull only) Write .env.sync.merge.<target> only; do not update .env.local / .env.production.local.
 
 Requires: Convex CLI (pnpm), Vercel CLI (\`vercel\` on PATH or pnpm dlx), linked project, and auth.
@@ -68,7 +75,10 @@ Snapshots: .env/sync/metadata.json (gitignored)
 const raw = process.argv.slice(2).filter((a) => a !== "--");
 const flags = new Set(raw.filter((a) => a.startsWith("-")));
 const positional = raw.filter((a) => !a.startsWith("-"));
-const [cmd, target] = positional;
+const convexOnly =
+  flags.has("--convex-only") || positional.includes("convex");
+const positionalNoConvex = positional.filter((a) => a !== "convex");
+const [cmd, target] = positionalNoConvex;
 const snapshotOnly = flags.has("--snapshot-only");
 const pullAll = flags.has("--all");
 const pushAll = cmd === "push" && flags.has("--all");
@@ -122,7 +132,11 @@ try {
           "Ignoring --from-working without --all (single-target push already uses working files unless you pass --from-sync)."
         );
       }
-      const pushOpts = { yes: pushYes, fromSync: fromSyncForPush };
+      const pushOpts = {
+        yes: pushYes,
+        fromSync: fromSyncForPush,
+        convexOnly,
+      };
       if (pushAll) {
         for (const t of /** @type {const} */ (["dev", "preview", "prod"])) {
           console.log("");
