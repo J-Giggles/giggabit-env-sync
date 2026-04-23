@@ -64,6 +64,10 @@ Usage:
 
   --convex-only     (push only) Same as trailing \`convex\`: Convex only, skip Vercel.
 
+  --force           (push only) Disable per-key diff; push every key even if the remote value matches.
+                        Default behavior fetches remote Convex + Vercel maps and only pushes keys whose
+                        value differs or that are new.
+
   --snapshot-only   (pull only) Write .env.sync.merge.<target> only; do not update .env.local / .env.production.local.
 
 Requires: Convex CLI (pnpm), Vercel CLI (\`vercel\` on PATH or pnpm dlx), linked project, and auth.
@@ -85,6 +89,7 @@ const pushAll = cmd === "push" && flags.has("--all");
 const pushYes = cmd === "push" && (flags.has("--yes") || flags.has("-y"));
 const pushFromSync = cmd === "push" && flags.has("--from-sync");
 const pushFromWorking = cmd === "push" && flags.has("--from-working");
+const pushForce = cmd === "push" && flags.has("--force");
 const pushInteractive =
   cmd === "push" && (flags.has("--interactive") || flags.has("-i"));
 
@@ -136,6 +141,7 @@ try {
         yes: pushYes,
         fromSync: fromSyncForPush,
         convexOnly,
+        force: pushForce,
       };
       if (pushAll) {
         for (const t of /** @type {const} */ (["dev", "preview", "prod"])) {
