@@ -98,6 +98,7 @@ In the **root** `package.json` of your app:
 {
   "scripts": {
     "env:sync:pull": "node scripts/vercel-convex-env-sync/run.mjs pull",
+    "env:sync:pull:cli": "node scripts/vercel-convex-env-sync/run.mjs pull --interactive",
     "env:sync:push": "node scripts/vercel-convex-env-sync/run.mjs push",
     "env:sync:push:cli": "node scripts/vercel-convex-env-sync/run.mjs push --interactive",
     "env:sync:clear": "node scripts/vercel-convex-env-sync/run.mjs clear"
@@ -108,11 +109,16 @@ In the **root** `package.json` of your app:
 Usage:
 
 ```bash
-# Interactive: lists Vercel deployment targets from `vercel env list`, pulls each scope,
-# infers Convex dev vs prod from slugs; if every target shares the same Convex slug but your
-# local `convex env list` / `--prod` slugs differ (e.g. another project), defaults to Convex production.
+# Default: pull all three targets, print cross-environment preview table (dev / preview / prod),
+# then confirm. Use --yes to skip confirmation after the table.
 pnpm run env:sync:pull
-# Interactive menu: **0** = same as `pull -- --all` (writes `.env.sync.*`); **1–3** = one Vercel scope.
+pnpm run env:sync:pull -- --all --yes
+
+# Advanced interactive pull (inventory menu, presets, snapshot-only, key filter after preview):
+pnpm run env:sync:pull:cli
+
+# Limit keys: --keys AWS_*,WORKOS_* (or -k). In pull:cli / push:cli, the preview table prints
+# first; answer "Limit … to specific keys?" and paste names from the table.
 
 # Merged Convex + Vercel per target, example layout → `.env.sync.development`, `.env.sync.preview`, …
 pnpm run env:sync:pull -- --all
@@ -125,7 +131,8 @@ pnpm run env:sync:push -- dev
 pnpm run env:sync:push -- preview
 pnpm run env:sync:push -- prod
 
-# Guided interactive push (targets, snapshot vs working files, --yes, Vercel sensitive on/off):
+# Guided interactive push: cross-environment preview table, optional key filter after table,
+# then confirm (targets, snapshot vs working files, per-key approval, Vercel sensitive on/off):
 pnpm run env:sync:push:cli
 # Same as: pnpm run env:sync:push -- --interactive
 
