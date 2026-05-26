@@ -162,6 +162,7 @@ In the **root** `package.json` of your app:
 {
   "scripts": {
     "env:sync:pull": "node scripts/vercel-convex-env-sync/run.mjs pull",
+    "env:sync:pull:cli": "node scripts/vercel-convex-env-sync/run.mjs pull --interactive",
     "env:sync:push": "node scripts/vercel-convex-env-sync/run.mjs push",
     "env:sync:push:cli": "node scripts/vercel-convex-env-sync/run.mjs push --interactive",
     "env:sync:check": "node scripts/vercel-convex-env-sync/run.mjs check",
@@ -178,13 +179,13 @@ In the **root** `package.json` of your app:
 Usage:
 
 ```bash
-# Interactive: lists Vercel deployment targets from `vercel env list`, pulls each scope,
-# infers Convex dev vs prod from slugs; if every target shares the same Convex slug but your
-# local `convex env list` / `--prod` slugs differ (e.g. another project), defaults to Convex production.
+# Guided interactive pull (choose pull-all, inventory + Convex pairing, or classic presets):
 pnpm run env:sync:pull
-# Interactive menu: **0** = same as `pull -- --all` (writes `.env.sync.*`); **1–3** = one Vercel scope.
+# Same as:
+pnpm run env:sync:pull:cli
 
 # Merged Convex + Vercel per target, example layout → `.env.sync.development`, `.env.sync.preview`, …
+# Prints a cross-environment diff table when ≥2 snapshot files exist.
 pnpm run env:sync:pull -- --all
 
 pnpm run env:sync:pull -- dev

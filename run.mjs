@@ -20,13 +20,14 @@ import {
   getVercelProjects,
   isConvexEnabled,
 } from "./lib/config.mjs";
-import { interactivePull } from "./lib/interactive-pull.mjs";
+import { interactivePullCli } from "./lib/interactive-pull-cli.mjs";
 import { pullAllVercelDeployments } from "./lib/pull-all.mjs";
 import { pullTarget } from "./lib/pull.mjs";
 import { pushTarget } from "./lib/push.mjs";
 import { interactivePushCli } from "./lib/interactive-push-cli.mjs";
 import { interactiveClear } from "./lib/clear.mjs";
 import { deployTarget, parseDeployArgs } from "./lib/deploy.mjs";
+import { reportEnvSnapshotDiffIfReady } from "./lib/print-env-snapshot-diff.mjs";
 import { syncInfo, syncWarn } from "./lib/cli-style.mjs";
 
 const VALID = new Set(["dev", "preview", "prod"]);
@@ -35,8 +36,10 @@ function usage() {
   console.log(`
 Usage:
   pnpm run env:sync:pull
-                        Interactive: merge one scope or option 0 = pull all (same as pull -- --all);
-                        writes .env.sync.* snapshot files. (Disabled when ENV_SYNC_DISABLE_CONVEX=1.)
+  pnpm run env:sync:pull:cli
+                        Interactive: choose pull-all, Vercel inventory + Convex pairing, or classic
+                        dev/preview/prod presets. Same as pull with no target or pull -- --interactive.
+                        Inventory mode disabled when ENV_SYNC_DISABLE_CONVEX=1.
 
   pnpm run env:sync:pull -- --all
                         For each Vercel target: merge Convex + Vercel (same pairing as dev/preview/prod
@@ -60,6 +63,8 @@ Usage:
 
   pnpm run env:sync:push:cli
                         Interactive push: choose targets, from-sync vs working, Vercel sensitive, --yes.
+
+  --interactive, -i (pull only) Same as env:sync:pull:cli — guided pull.
 
   pnpm run env:sync:check -- <dev|preview|prod> [--from-working] [--convex-only|--vercel-only] [-q]
                         Read-only diff: compare local file vs hosted Convex + Vercel for the target.
@@ -111,6 +116,9 @@ Usage:
   --skip-vercel-deploy
 
   --snapshot-only   (pull only) Write .env.sync.merge.<target> only; do not update .env.local / .env.production.local.
+
+After multi-target pulls, prints a cross-environment diff table (keys that differ across
+  .env.sync.development / .preview / .production).
 
 Requires: Vercel CLI (\`vercel\` on PATH or pnpm dlx), linked project, and auth.
 With Convex enabled (default): Convex CLI (pnpm) and Convex auth.
@@ -202,6 +210,8 @@ const pushFromWorking = cmd === "push" && flags.has("--from-working");
 const pushForce = cmd === "push" && flags.has("--force");
 const pushInteractive =
   cmd === "push" && (flags.has("--interactive") || flags.has("-i"));
+const pullInteractive =
+  cmd === "pull" && (flags.has("--interactive") || flags.has("-i"));
 const explicitAllProjects = flags.has("--all-projects");
 
 if (
@@ -260,12 +270,18 @@ try {
         );
       }
       await pullAllVercelDeployments();
-    } else if (!target) {
-      await interactivePull({ snapshotOnly });
+    } else if (!target || pullInteractive) {
+      if (pullInteractive && target && VALID.has(target)) {
+        syncWarn(
+          "Ignoring preset target with --interactive; use the guided menu or `pnpm run env:sync:pull -- <target>`."
+        );
+      }
+      await interactivePullCli({ snapshotOnly });
     } else {
       await pullTarget(/** @type {"dev" | "preview" | "prod"} */ (target), {
         snapshotOnly,
       });
+      reportEnvSnapshotDiffIfReady();
     }
   } else if (cmd === "push") {
     if (pushInteractive) {
