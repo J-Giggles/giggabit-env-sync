@@ -29,7 +29,15 @@ import { interactiveClear } from "./lib/clear.mjs";
 import { deployTarget, parseDeployArgs } from "./lib/deploy.mjs";
 import { bootstrap } from "./lib/bootstrap.mjs";
 import { runToolCheck } from "./lib/upstream-check.mjs";
-import { syncInfo, syncWarn } from "./lib/cli-style.mjs";
+import { runVercelAuthCheck } from "./lib/vercel-auth.mjs";
+import { runVercelLinksReport } from "./lib/vercel-links-report.mjs";
+import { runFormatEnvFiles } from "./lib/format-env-files.mjs";
+import {
+  printCliFailure,
+  printCommandHeader,
+  syncInfo,
+  syncWarn,
+} from "./lib/cli-output.mjs";
 
 const VALID = new Set(["dev", "preview", "prod"]);
 
@@ -38,6 +46,28 @@ function usage() {
 Usage:
   pnpm run env:sync:tool-check
                         Verify vendored tool matches J-Giggles/giggabit-env-sync hub (UPSTREAM.json).
+
+  pnpm run env:sync:auth-check
+                        Verify VERCEL_TOKEN can read the linked project on the repo's Vercel team (no secrets printed).
+
+  pnpm run env:sync:links
+                        Deployment link map: Vercel apps + Cloudflare Worker envs.
+
+  pnpm run env:sync:links -- --remote
+                        Also run \`vercel project ls\` and \`wrangler whoami\`.
+
+  pnpm run env:sync:links -- --hints
+                        Include per-app vercel inspect / wrangler commands.
+
+  pnpm run env:sync:format
+                        Reformat existing root env files to match .env.example layout
+                        (comments, section order; extra keys appended at bottom).
+
+  pnpm run env:sync:format -- <dev|preview|prod>
+                        Reformat only files for that target (.env.local, .env.sync.*, etc.).
+
+  pnpm run env:sync:format -- --dry-run
+                        Show which files would change without writing.
 
   pnpm run env:sync:pull
                         Interactive: merge one scope or option 0 = pull all (same as pull -- --all);
@@ -222,6 +252,59 @@ if (cmd === "tool-check") {
   process.exit(process.exitCode ?? 0);
 }
 
+if (cmd === "auth-check") {
+  printCommandHeader({ command: "auth-check", project: process.env.ENV_SYNC_VERCEL_PROJECT_CWD?.trim() || "repo root" });
+  try {
+    await bootstrap({ skipAuth: true, skipUpdateCheck: true });
+    await runVercelAuthCheck();
+  } catch (e) {
+    printCliFailure(e);
+    process.exitCode = 1;
+  }
+  process.exit(process.exitCode ?? 0);
+}
+
+if (cmd === "links") {
+  printCommandHeader({ command: "links" });
+  try {
+    await bootstrap({ skipAuth: true, skipUpdateCheck: true });
+    await runVercelLinksReport({
+      remote: flags.has("--remote"),
+      hints: flags.has("--hints"),
+    });
+  } catch (e) {
+    printCliFailure(e);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+if (cmd === "format") {
+  if (target && !VALID.has(target)) {
+    usage();
+    process.exitCode = 1;
+    process.exit();
+  }
+  printCommandHeader({
+    command: "format",
+    extras: [
+      ...(target ? [target] : ["all targets"]),
+      ...(flags.has("--dry-run") ? ["dry-run"] : []),
+    ],
+  });
+  try {
+    await bootstrap({ skipAuth: true, skipUpdateCheck: true });
+    runFormatEnvFiles({
+      targets: target ? [/** @type {"dev" | "preview" | "prod"} */ (target)] : [],
+      dryRun: flags.has("--dry-run"),
+    });
+  } catch (e) {
+    printCliFailure(e);
+    process.exitCode = 1;
+  }
+  process.exit(process.exitCode ?? 0);
+}
+
 if (
   !cmd ||
   (cmd === "push" && !pushAll && !pushInteractive && (!target || !VALID.has(target)))
@@ -256,20 +339,26 @@ const shouldLoopProjects =
   projectOverride === null &&
   (explicitAllProjects || monorepoProjects.length >= 2);
 
+/** @type {string[]} */
+const headerExtras = [];
 if (!isConvexEnabled()) {
-  syncInfo("Convex disabled (ENV_SYNC_DISABLE_CONVEX=1) — Vercel-only mode.");
+  headerExtras.push("Vercel-only (Convex off)");
 }
 if (shouldLoopProjects) {
-  syncInfo(
-    `Monorepo: ${monorepoProjects.length} Vercel project(s) — ${monorepoProjects
-      .map((p) => p.label)
-      .join(", ")}`
+  headerExtras.push(
+    `${monorepoProjects.length} projects: ${monorepoProjects.map((p) => p.label).join(", ")}`
   );
 }
 
-await bootstrap({ skipUpdateCheck });
+printCommandHeader({
+  command: cmd ?? "help",
+  project: process.env.ENV_SYNC_VERCEL_PROJECT_CWD?.trim() || "repo root",
+  extras: headerExtras,
+});
 
 try {
+  await bootstrap({ skipUpdateCheck });
+
   if (cmd === "clear") {
     await interactiveClear({ dryRun: flags.has("--dry-run") });
   } else if (cmd === "pull") {
@@ -360,6 +449,6 @@ try {
     process.exit(1);
   }
 } catch (e) {
-  console.error(e instanceof Error ? e.message : e);
+  printCliFailure(e);
   process.exitCode = 1;
 }
