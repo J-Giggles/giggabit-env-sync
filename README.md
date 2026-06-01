@@ -12,7 +12,8 @@ Supports both:
 Convex is **optional**: stacks without Convex (e.g. Postgres / Drizzle / Neon) can disable Convex entirely and use this tool as a Vercel-only env sync.
 
 - **Requirements:** Node.js 18+, [`pnpm`](https://pnpm.io) (or adapt commands to `npm`/`yarn`), the [Vercel CLI](https://vercel.com/docs/cli) (`vercel` on your `PATH`, or it will try `pnpm dlx vercel`). The [Convex CLI](https://docs.convex.dev/cli) is required only when Convex is enabled (the default).
-- **No extra npm dependencies** — uses only Node built-ins.
+- **No extra npm dependencies** for pull/push/check — uses Node built-ins only.
+- **`links` command** — optional consumer **root** `devDependencies`: [`cli-table3`](https://www.npmjs.com/package/cli-table3), [`boxen`](https://www.npmjs.com/package/boxen) (tables + section boxes). Install with `pnpm add -D cli-table3 boxen -w` in a monorepo.
 
 **Publishing this folder to a public repo:** see **[SECURITY.md](./SECURITY.md)** (verify no `.env*` / `.env.sync.*` in commits; subtree push notes).
 
@@ -113,6 +114,7 @@ All configuration is read from environment variables. Set them in `package.json`
 | `ENV_SYNC_VERCEL_AUTH_FILE` | unset | Repo-local Vercel CLI auth JSON (e.g. `.env/sync/vercel.auth.json`), gitignored. |
 | `ENV_SYNC_ALLOW_GLOBAL_VERCEL_AUTH` | unset | When `1`: allow global `vercel login` token even if `giggabit-env-sync.repo.json` defines a team guard. |
 | `ENV_SYNC_SKIP_UPDATE_CHECK` | unset | When `1`: skip `UPSTREAM.json` vs hub `master` freshness check. |
+| `ENV_SYNC_VERBOSE` | unset | When `1`: print auth/bootstrap detail (e.g. tool pin OK, team token routing). Errors always use the boxed layout. |
 
 Repo root **`giggabit-env-sync.repo.json`** supplies defaults for team, projects, Convex disable, and preview branch when env vars are unset.
 
@@ -173,6 +175,9 @@ In the **root** `package.json` of your app:
     "env:sync:push": "node scripts/giggabit-env-sync/run.mjs push",
     "env:sync:push:cli": "node scripts/giggabit-env-sync/run.mjs push --interactive",
     "env:sync:check": "node scripts/giggabit-env-sync/run.mjs check",
+    "env:sync:links": "node scripts/giggabit-env-sync/run.mjs links",
+    "env:sync:links:remote": "node scripts/giggabit-env-sync/run.mjs links --remote",
+    "env:sync:format": "node scripts/giggabit-env-sync/run.mjs format",
     "env:sync:clear": "node scripts/giggabit-env-sync/run.mjs clear",
     "deploy": "node scripts/giggabit-env-sync/run.mjs deploy",
     "deploy:staging": "pnpm deploy -- staging",
@@ -232,7 +237,34 @@ pnpm run env:sync:check -- preview -q     # prints `true` or `false` only
 # Remove hosted variables from chosen Vercel scopes and/or Convex dev or prod (interactive; local files untouched):
 pnpm run env:sync:clear
 pnpm run env:sync:clear -- --dry-run
+
+# Show linked Vercel projects (.vercel/project.json) and Cloudflare workers (wrangler.toml):
+pnpm run env:sync:links
+pnpm run env:sync:links:remote    # also vercel project ls + wrangler whoami
+node scripts/giggabit-env-sync/run.mjs links --hints   # per-app inspect / link commands
 ```
+
+Requires root `devDependencies`: `cli-table3`, `boxen` (see install note at top).
+
+### Reformat local env files (`env:sync:format`)
+
+Reorders keys and preserves **comments / section headers** from `.env.example` (same layout as `env:sync:pull`). Values are kept from each file; keys only in the env file are appended under **Additional variables**.
+
+```bash
+pnpm run env:sync:format              # .env.local, .env.sync.*, .env.preview, … (if present)
+pnpm run env:sync:format -- dev       # dev targets only
+pnpm run env:sync:format -- --dry-run # preview changes
+```
+
+| Target | Files (when they exist) |
+|--------|-------------------------|
+| `dev` | `.env.local`, `.env.development.local`, `.env.sync.development` |
+| `preview` | `.env.preview`, `.env.sync.preview` |
+| `prod` | `.env.production.local`, `.env.sync.production` |
+
+Template resolution matches pull: `.env.development.example` / `.env.preview.example` / `.env.production.example`, then `.env.example`.
+
+Does not call Vercel or Convex (no `VERCEL_TOKEN` required).
 
 ### Deploy command
 
