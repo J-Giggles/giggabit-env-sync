@@ -1,6 +1,6 @@
-# vercel-convex-env-sync
+# giggabit-env-sync
 
-**Public repo:** [github.com/J-Giggles/vercel-convex-env-sync](https://github.com/J-Giggles/vercel-convex-env-sync)
+**Public repo:** [github.com/J-Giggles/giggabit-env-sync](https://github.com/J-Giggles/giggabit-env-sync)
 
 Small **Node.js** (ESM) helpers to **pull** and **push** environment variables between your machine, [**Convex**](https://convex.dev) (`convex env`), and [**Vercel**](https://vercel.com) (`vercel env`). Includes **drift warnings** before overwriting hosted env.
 
@@ -48,12 +48,12 @@ Your **`.env.local`** should still point **`NEXT_PUBLIC_CONVEX_URL`** (and optio
 
 ## Install in your project
 
-Put this package **under your app’s repo** at **`scripts/vercel-convex-env-sync/`** (three segments: `scripts` → `vercel-convex-env-sync` → files). The tool resolves the **app root** as three levels above `lib/paths.mjs`; installing elsewhere breaks sync paths.
+Put this package **under your app’s repo** at **`scripts/giggabit-env-sync/`** (three segments: `scripts` → `giggabit-env-sync` → files). The tool resolves the **app root** as three levels above `lib/paths.mjs`; installing elsewhere breaks sync paths.
 
 ```text
 your-app/
   scripts/
-    vercel-convex-env-sync/
+    giggabit-env-sync/
       run.mjs
       lib/
       README.md
@@ -63,12 +63,12 @@ your-app/
 
 ```bash
 cd /path/to/your-app
-git clone https://github.com/J-Giggles/vercel-convex-env-sync.git /tmp/vercel-convex-env-sync
+git clone https://github.com/J-Giggles/giggabit-env-sync.git /tmp/giggabit-env-sync
 mkdir -p scripts
-rm -rf scripts/vercel-convex-env-sync
-mkdir -p scripts/vercel-convex-env-sync
-cp -R /tmp/vercel-convex-env-sync/{run.mjs,lib,README.md} scripts/vercel-convex-env-sync/
-rm -rf /tmp/vercel-convex-env-sync
+rm -rf scripts/giggabit-env-sync
+mkdir -p scripts/giggabit-env-sync
+cp -R /tmp/giggabit-env-sync/{run.mjs,lib,README.md} scripts/giggabit-env-sync/
+rm -rf /tmp/giggabit-env-sync
 ```
 
 ### Option B — Git subtree (track upstream updates)
@@ -76,23 +76,23 @@ rm -rf /tmp/vercel-convex-env-sync
 From your app repo root:
 
 ```bash
-git remote add vercel-convex-env-sync https://github.com/J-Giggles/vercel-convex-env-sync.git
-git fetch vercel-convex-env-sync
-git subtree add --prefix=scripts/vercel-convex-env-sync vercel-convex-env-sync master --squash
+git remote add giggabit-env-sync https://github.com/J-Giggles/giggabit-env-sync.git
+git fetch giggabit-env-sync
+git subtree add --prefix=scripts/giggabit-env-sync giggabit-env-sync master --squash
 ```
 
 This upstream repo uses the **`master`** branch. To pull updates later:
 
 ```bash
-git subtree pull --prefix=scripts/vercel-convex-env-sync vercel-convex-env-sync master --squash
+git subtree pull --prefix=scripts/giggabit-env-sync giggabit-env-sync master --squash
 ```
 
 ### Option C — Submodule
 
-The repository root is `run.mjs` + `lib/` — add it as **`scripts/vercel-convex-env-sync/`** so paths match:
+The repository root is `run.mjs` + `lib/` — add it as **`scripts/giggabit-env-sync/`** so paths match:
 
 ```bash
-git submodule add https://github.com/J-Giggles/vercel-convex-env-sync.git scripts/vercel-convex-env-sync
+git submodule add https://github.com/J-Giggles/giggabit-env-sync.git scripts/giggabit-env-sync
 ```
 
 ---
@@ -109,6 +109,12 @@ All configuration is read from environment variables. Set them in `package.json`
 | `ENV_SYNC_VERCEL_PREVIEW_BRANCH` | `staging` | Git branch used to scope Vercel Preview env vars. |
 | `ENV_SYNC_VERCEL_PREVIEW_NO_BRANCH` | unset | When `1`: Preview env vars are unscoped (apply to all preview deployments). |
 | `ENV_SYNC_VERCEL_CONCURRENCY` | `8` | Vercel REST API concurrency for env upserts. |
+| `ENV_SYNC_VERCEL_TEAM_ID` | unset | Vercel team id for REST API (often set via `giggabit-env-sync.repo.json` or `.env.local`). |
+| `ENV_SYNC_VERCEL_AUTH_FILE` | unset | Repo-local Vercel CLI auth JSON (e.g. `.env/sync/vercel.auth.json`), gitignored. |
+| `ENV_SYNC_ALLOW_GLOBAL_VERCEL_AUTH` | unset | When `1`: allow global `vercel login` token even if `giggabit-env-sync.repo.json` defines a team guard. |
+| `ENV_SYNC_SKIP_UPDATE_CHECK` | unset | When `1`: skip `UPSTREAM.json` vs hub `master` freshness check. |
+
+Repo root **`giggabit-env-sync.repo.json`** supplies defaults for team, projects, Convex disable, and preview branch when env vars are unset.
 
 ### Per-invocation flags
 
@@ -116,14 +122,16 @@ All configuration is read from environment variables. Set them in `package.json`
 |------|--------|
 | `--project=<rel>` | Pin a single invocation to one Vercel project; overrides `ENV_SYNC_VERCEL_PROJECT_CWD` and any monorepo loop. |
 | `--all-projects` | Force the monorepo loop on `push` / `check` even with only one entry in `ENV_SYNC_VERCEL_PROJECTS`. |
+| `--no-update-check` | Skip hub freshness check (`UPSTREAM.json` vs `J-Giggles/giggabit-env-sync`). |
+| `--missing-only` | Pull: add host keys missing locally. Push: add non-empty local keys missing on host. |
 
 ### Single-repo example (Convex + Vercel — original behavior)
 
 ```json
 {
   "scripts": {
-    "env:sync:pull": "node scripts/vercel-convex-env-sync/run.mjs pull",
-    "env:sync:push": "node scripts/vercel-convex-env-sync/run.mjs push"
+    "env:sync:pull": "node scripts/giggabit-env-sync/run.mjs pull",
+    "env:sync:push": "node scripts/giggabit-env-sync/run.mjs push"
   }
 }
 ```
@@ -133,8 +141,8 @@ All configuration is read from environment variables. Set them in `package.json`
 ```json
 {
   "scripts": {
-    "env:sync:pull": "ENV_SYNC_DISABLE_CONVEX=1 node scripts/vercel-convex-env-sync/run.mjs pull",
-    "env:sync:push": "ENV_SYNC_DISABLE_CONVEX=1 node scripts/vercel-convex-env-sync/run.mjs push"
+    "env:sync:pull": "ENV_SYNC_DISABLE_CONVEX=1 node scripts/giggabit-env-sync/run.mjs pull",
+    "env:sync:push": "ENV_SYNC_DISABLE_CONVEX=1 node scripts/giggabit-env-sync/run.mjs push"
   }
 }
 ```
@@ -144,8 +152,8 @@ All configuration is read from environment variables. Set them in `package.json`
 ```json
 {
   "scripts": {
-    "env:sync:pull": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECT_CWD=apps/admin node scripts/vercel-convex-env-sync/run.mjs pull",
-    "env:sync:push": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECTS=apps/admin,apps/website node scripts/vercel-convex-env-sync/run.mjs push"
+    "env:sync:pull": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECT_CWD=apps/admin node scripts/giggabit-env-sync/run.mjs pull",
+    "env:sync:push": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECTS=apps/admin,apps/website node scripts/giggabit-env-sync/run.mjs push"
   }
 }
 ```
@@ -161,12 +169,12 @@ In the **root** `package.json` of your app:
 ```json
 {
   "scripts": {
-    "env:sync:pull": "node scripts/vercel-convex-env-sync/run.mjs pull",
-    "env:sync:push": "node scripts/vercel-convex-env-sync/run.mjs push",
-    "env:sync:push:cli": "node scripts/vercel-convex-env-sync/run.mjs push --interactive",
-    "env:sync:check": "node scripts/vercel-convex-env-sync/run.mjs check",
-    "env:sync:clear": "node scripts/vercel-convex-env-sync/run.mjs clear",
-    "deploy": "node scripts/vercel-convex-env-sync/run.mjs deploy",
+    "env:sync:pull": "node scripts/giggabit-env-sync/run.mjs pull",
+    "env:sync:push": "node scripts/giggabit-env-sync/run.mjs push",
+    "env:sync:push:cli": "node scripts/giggabit-env-sync/run.mjs push --interactive",
+    "env:sync:check": "node scripts/giggabit-env-sync/run.mjs check",
+    "env:sync:clear": "node scripts/giggabit-env-sync/run.mjs clear",
+    "deploy": "node scripts/giggabit-env-sync/run.mjs deploy",
     "deploy:staging": "pnpm deploy -- staging",
     "deploy:production": "pnpm deploy -- production",
     "deploy:staging:git": "pnpm deploy -- staging --git-push",
@@ -190,6 +198,12 @@ pnpm run env:sync:pull -- --all
 pnpm run env:sync:pull -- dev
 pnpm run env:sync:pull -- preview
 pnpm run env:sync:pull -- prod
+
+# Interactive pull shows a preview table (KEY / SOURCE / VALUE) and asks to confirm before writing.
+# `--missing-only`: add host keys not already in the local file; keep existing local values.
+pnpm run env:sync:pull -- --all --missing-only
+pnpm run env:sync:pull -- dev --missing-only
+pnpm run env:sync:push -- dev --missing-only
 
 pnpm run env:sync:push -- dev
 pnpm run env:sync:push -- preview
@@ -270,7 +284,7 @@ CLI output uses ANSI colors for the `[env:sync]` prefix (no extra npm dependenci
 Ignore the sync cache (metadata, pull backups) and root sync artifacts (secrets):
 
 ```gitignore
-# vercel-convex-env-sync
+# giggabit-env-sync
 .env/sync/
 .env.sync.*
 ```
@@ -326,7 +340,7 @@ Add `--cmd-url-env-var-name …` only if the CLI cannot infer your framework’s
 
 ## Adding to an **existing** project
 
-1. **Install files** using Option A, B, or C above; keep paths as `scripts/vercel-convex-env-sync/…` so the `package.json` snippets match.
+1. **Install files** using Option A, B, or C above; keep paths as `scripts/giggabit-env-sync/…` so the `package.json` snippets match.
 2. **Merge `package.json` scripts** — avoid duplicate keys; if you already have `env:sync:*`, rename or merge.
 3. **`.gitignore`** — add `.env/sync/` if not already covered.
 4. **Convex / Vercel already configured:** run **`env:sync:pull`** for each target you use (`dev`, `preview`, `prod`) **before** the first **`env:sync:push`**, so local metadata matches hosted env and you get fewer drift warnings.
@@ -341,15 +355,50 @@ Before pushing, the tool compares **current** hosted Convex + Vercel env to the 
 
 ---
 
+## Per-consumer repo checklist
+
+Use this when adding giggabit-env-sync to a **new or existing** app repo (LifePass neon, valgrind, etc.):
+
+1. **Hub remote** (once per repo): `git remote add giggabit-env-sync https://github.com/J-Giggles/giggabit-env-sync.git`
+2. **Install tool**: `git subtree add --prefix=scripts/giggabit-env-sync giggabit-env-sync master --squash` (or `env:sync:tool-update` after an initial copy)
+3. **Commit** [`giggabit-env-sync.repo.json`](../../giggabit-env-sync.repo.json) at the **repo root** — `vercelTeamId`, `vercelTeamSlug`, `vercelProjects`, `disableConvex`, `previewBranch` (no secrets)
+4. **PR in that repo only**: `package.json` `env:sync:*` scripts, `vercel link` per app, root `.env.example` vars
+5. **Developer machine**: `VERCEL_TOKEN` in root `.env.local` for the **correct Vercel account/team** (or `ENV_SYNC_VERCEL_AUTH_FILE=.env/sync/vercel.auth.json`)
+6. **Before pull/push**: `pnpm run env:sync:tool-check` (compares `UPSTREAM.json` to hub `master`)
+7. **Pull**: `pnpm run env:sync:pull` (interactive table) or `pnpm run env:sync:pull -- --all --missing-only`
+
+**PR boundaries**
+
+| Change | Where to open the PR |
+|--------|----------------------|
+| Tool bug, preview table, new flags | `J-Giggles/giggabit-env-sync` |
+| Monorepo paths, team id, Convex off | Consumer repo (`giggabit-env-sync.repo.json` + `package.json`) |
+| New app secret name | Consumer `.env.example` only |
+
+**Test a hub PR before merge:**
+
+```bash
+git fetch giggabit-env-sync feat/my-branch
+git subtree pull --prefix=scripts/giggabit-env-sync giggabit-env-sync feat/my-branch --squash
+```
+
+**Per-repo Vercel login**
+
+- Set `VERCEL_TOKEN` in root `.env.local` (loaded by the CLI before commands).
+- Optional `ENV_SYNC_VERCEL_AUTH_FILE` for a repo-local auth JSON (gitignored under `.env/sync/`).
+- When `giggabit-env-sync.repo.json` defines `vercelTeamId` / `vercelTeamSlug`, global `vercel login` is **not** used unless `ENV_SYNC_ALLOW_GLOBAL_VERCEL_AUTH=1`.
+
+---
+
 ## Publishing your own fork (optional)
 
-The canonical repo is **[github.com/J-Giggles/vercel-convex-env-sync](https://github.com/J-Giggles/vercel-convex-env-sync)** (contents at **repo root**: `run.mjs`, `lib/`, `README.md`). To publish a **fork** or mirror under another account with [`gh`](https://cli.github.com/):
+The canonical repo is **[github.com/J-Giggles/giggabit-env-sync](https://github.com/J-Giggles/giggabit-env-sync)** (contents at **repo root**: `run.mjs`, `lib/`, `README.md`). To publish a **fork** or mirror under another account with [`gh`](https://cli.github.com/):
 
 ```bash
 mkdir my-env-sync && cd my-env-sync
 # Copy run.mjs, lib/, README.md from upstream or your monorepo
-git init && git add . && git commit -m "feat: vercel-convex-env-sync"
-gh repo create YOUR_NAME/vercel-convex-env-sync --public --source=. --remote=origin --push
+git init && git add . && git commit -m "feat: giggabit-env-sync"
+gh repo create YOUR_NAME/giggabit-env-sync --public --source=. --remote=origin --push
 ```
 
 ---

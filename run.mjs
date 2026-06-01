@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * env:sync — pull or push env between local files, Convex (optional), and Vercel.
+ * giggabit-env-sync — pull or push env between local files, Convex (optional), and Vercel.
  *
  * Single-repo mode (default) and monorepo mode are both supported:
  *
@@ -27,6 +27,8 @@ import { pushTarget } from "./lib/push.mjs";
 import { interactivePushCli } from "./lib/interactive-push-cli.mjs";
 import { interactiveClear } from "./lib/clear.mjs";
 import { deployTarget, parseDeployArgs } from "./lib/deploy.mjs";
+import { bootstrap } from "./lib/bootstrap.mjs";
+import { runToolCheck } from "./lib/upstream-check.mjs";
 import { syncInfo, syncWarn } from "./lib/cli-style.mjs";
 
 const VALID = new Set(["dev", "preview", "prod"]);
@@ -34,16 +36,20 @@ const VALID = new Set(["dev", "preview", "prod"]);
 function usage() {
   console.log(`
 Usage:
+  pnpm run env:sync:tool-check
+                        Verify vendored tool matches J-Giggles/giggabit-env-sync hub (UPSTREAM.json).
+
   pnpm run env:sync:pull
                         Interactive: merge one scope or option 0 = pull all (same as pull -- --all);
                         writes .env.sync.* snapshot files. (Disabled when ENV_SYNC_DISABLE_CONVEX=1.)
 
-  pnpm run env:sync:pull -- --all
+  pnpm run env:sync:pull -- --all [--missing-only]
                         For each Vercel target: merge Convex + Vercel (same pairing as dev/preview/prod
                         presets), format with .env.example, write .env.sync.<environment>.
 
-  pnpm run env:sync:pull -- <dev|preview|prod> [--snapshot-only]
-                        Non-interactive preset (same pairing as before).
+  pnpm run env:sync:pull -- <dev|preview|prod> [--snapshot-only] [--missing-only]
+                        Non-interactive preset (same pairing as before). Interactive pull shows a
+                        preview table and asks to confirm before writing.
 
   pnpm run env:sync:push -- <dev|preview|prod>
   pnpm run env:sync:push -- <dev|preview|prod> convex
@@ -95,6 +101,9 @@ Usage:
 
   --force           (push only) Disable per-key diff; push every key even if the remote value matches.
 
+  --missing-only    (pull) Add host keys missing from the local file; never overwrite existing local values.
+                    (push) Push only non-empty local keys absent on Convex/Vercel; never update existing remote values.
+
   --project=<rel>   (push/check/clear/deploy) Pin this invocation to a single Vercel project
                         directory relative to repo root (e.g. \`apps/admin\`). Overrides
                         ENV_SYNC_VERCEL_PROJECT_CWD and any monorepo loop.
@@ -111,6 +120,8 @@ Usage:
   --skip-vercel-deploy
 
   --snapshot-only   (pull only) Write .env.sync.merge.<target> only; do not update .env.local / .env.production.local.
+
+  --no-update-check Skip hub freshness check (UPSTREAM.json vs github.com/J-Giggles/giggabit-env-sync).
 
 Requires: Vercel CLI (\`vercel\` on PATH or pnpm dlx), linked project, and auth.
 With Convex enabled (default): Convex CLI (pnpm) and Convex auth.
@@ -194,6 +205,7 @@ const convexOnly =
 const positionalNoConvex = positional.filter((a) => a !== "convex");
 const [cmd, target] = positionalNoConvex;
 const snapshotOnly = flags.has("--snapshot-only");
+const missingOnly = flags.has("--missing-only");
 const pullAll = flags.has("--all");
 const pushAll = cmd === "push" && flags.has("--all");
 const pushYes = cmd === "push" && (flags.has("--yes") || flags.has("-y"));
@@ -203,6 +215,12 @@ const pushForce = cmd === "push" && flags.has("--force");
 const pushInteractive =
   cmd === "push" && (flags.has("--interactive") || flags.has("-i"));
 const explicitAllProjects = flags.has("--all-projects");
+const skipUpdateCheck = flags.has("--no-update-check");
+
+if (cmd === "tool-check") {
+  await runToolCheck();
+  process.exit(process.exitCode ?? 0);
+}
 
 if (
   !cmd ||
@@ -249,6 +267,8 @@ if (shouldLoopProjects) {
   );
 }
 
+await bootstrap({ skipUpdateCheck });
+
 try {
   if (cmd === "clear") {
     await interactiveClear({ dryRun: flags.has("--dry-run") });
@@ -259,12 +279,13 @@ try {
           "Ignoring preset target with --all; use one or the other."
         );
       }
-      await pullAllVercelDeployments();
+      await pullAllVercelDeployments({ missingOnly });
     } else if (!target) {
-      await interactivePull({ snapshotOnly });
+      await interactivePull({ snapshotOnly, missingOnly });
     } else {
       await pullTarget(/** @type {"dev" | "preview" | "prod"} */ (target), {
         snapshotOnly,
+        missingOnly,
       });
     }
   } else if (cmd === "push") {
@@ -287,6 +308,7 @@ try {
         fromSync: fromSyncForPush,
         convexOnly,
         force: pushForce,
+        missingOnly,
         ...(metadataNamespace ? { metadataNamespace } : {}),
       });
       /**
