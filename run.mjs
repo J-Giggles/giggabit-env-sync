@@ -279,7 +279,10 @@ try {
           "Ignoring preset target with --all; use one or the other."
         );
       }
-      await pullAllVercelDeployments({ missingOnly });
+      await pullAllVercelDeployments({
+        missingOnly,
+        projects: shouldLoopProjects ? monorepoProjects : null,
+      });
     } else if (!target) {
       await interactivePull({ snapshotOnly, missingOnly });
     } else {
