@@ -105,7 +105,7 @@ All configuration is read from environment variables. Set them in `package.json`
 |----------|---------|--------|
 | `ENV_SYNC_DISABLE_CONVEX` | unset | When `1` / `true` / `yes`: skip every Convex CLI call. `pull` / `push` / `check` / `clear` / `deploy` operate on Vercel only. Required for projects without a Convex backend. |
 | `ENV_SYNC_VERCEL_PROJECT_CWD` | `""` (REPO_ROOT) | Relative path (from repo root) to the directory that owns `.vercel/project.json`. Use this when the Vercel-linked project lives in a subdirectory (e.g. `apps/admin`). |
-| `ENV_SYNC_VERCEL_PROJECTS` | unset | Comma-separated list of relative paths. When ≥ 2 entries, `push` / `check` / `deploy` loop the operation across every project, sharing the same `.env.sync.*` snapshot. Each iteration sets `ENV_SYNC_VERCEL_PROJECT_CWD` internally. `pull` and `clear` stay single-project (use `--project=<rel>` to pick one). |
+| `ENV_SYNC_VERCEL_PROJECTS` | unset | Comma-separated list of relative paths. When ≥ 2 entries, `push` / `check` / `deploy` loop across every project. `pull --all` validates and fetches every configured project before writing one merged snapshot per deployment target; later projects win duplicate keys. Interactive or single-target `pull` and `clear` stay on the active project. Use `--project=<rel>` to pin any invocation to one project. |
 | `ENV_SYNC_VERCEL_PREVIEW_BRANCH` | `staging` | Git branch used to scope Vercel Preview env vars. |
 | `ENV_SYNC_VERCEL_PREVIEW_NO_BRANCH` | unset | When `1`: Preview env vars are unscoped (apply to all preview deployments). |
 | `ENV_SYNC_VERCEL_CONCURRENCY` | `8` | Vercel REST API concurrency for env upserts. |
@@ -121,7 +121,7 @@ Repo root **`giggabit-env-sync.repo.json`** supplies defaults for team, projects
 | Flag | Effect |
 |------|--------|
 | `--project=<rel>` | Pin a single invocation to one Vercel project; overrides `ENV_SYNC_VERCEL_PROJECT_CWD` and any monorepo loop. |
-| `--all-projects` | Force the monorepo loop on `push` / `check` even with only one entry in `ENV_SYNC_VERCEL_PROJECTS`. |
+| `--all-projects` | Force configured-project selection for `pull --all`, `push`, `check`, or `deploy` even with only one entry in `ENV_SYNC_VERCEL_PROJECTS`. |
 | `--no-update-check` | Skip hub freshness check (`UPSTREAM.json` vs `J-Giggles/giggabit-env-sync`). |
 | `--missing-only` | Pull: add host keys missing locally. Push: add non-empty local keys missing on host. |
 
@@ -152,13 +152,17 @@ Repo root **`giggabit-env-sync.repo.json`** supplies defaults for team, projects
 ```json
 {
   "scripts": {
-    "env:sync:pull": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECT_CWD=apps/admin node scripts/giggabit-env-sync/run.mjs pull",
+    "env:sync:pull": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECTS=apps/admin,apps/website node scripts/giggabit-env-sync/run.mjs pull --all",
     "env:sync:push": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECTS=apps/admin,apps/website node scripts/giggabit-env-sync/run.mjs push"
   }
 }
 ```
 
-`pull` reads from one project (the snapshot is shared); `push` loops both.
+`pull --all` first validates both project links, then reads each project in the
+declared order and writes merged development/preview/production snapshots only
+after every read succeeds. If both projects define a key, the later project wins.
+Use `--project=apps/admin` for a one-project pull. Interactive and single-target
+pulls remain scoped to that active project; `push` loops both projects.
 
 ---
 
