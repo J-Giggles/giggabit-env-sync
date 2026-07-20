@@ -126,7 +126,7 @@ Usage:
 
 Requires: Vercel CLI (\`vercel\` on PATH or pnpm dlx), linked project, and auth.
 With Convex enabled (default): Convex CLI (pnpm) and Convex auth.
-Snapshots: .env/sync/metadata.json (gitignored)
+Cache metadata: .env/sync/metadata.json, or .env.sync-cache/metadata.json when root .env is a file (gitignored)
 `);
 }
 
