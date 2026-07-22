@@ -31,6 +31,7 @@ import { deployTarget, parseDeployArgs } from "./lib/deploy.mjs";
 import { bootstrap } from "./lib/bootstrap.mjs";
 import { runToolCheck } from "./lib/upstream-check.mjs";
 import { syncInfo, syncWarn } from "./lib/cli-style.mjs";
+import { runVercelAuthCheck } from "./lib/vercel-auth.mjs";
 
 const VALID = new Set(["dev", "preview", "prod"]);
 
@@ -39,6 +40,9 @@ function usage() {
 Usage:
   pnpm run env:sync:tool-check
                         Verify vendored tool matches J-Giggles/giggabit-env-sync hub (UPSTREAM.json).
+
+  pnpm run env:sync:auth-check
+                        Verify Vercel authentication without printing secret values.
 
   pnpm run env:sync:pull
                         Interactive: merge one scope or option 0 = pull all (same as pull -- --all);
@@ -220,6 +224,17 @@ const skipUpdateCheck = flags.has("--no-update-check");
 
 if (cmd === "tool-check") {
   await runToolCheck();
+  process.exit(process.exitCode ?? 0);
+}
+
+if (cmd === "auth-check") {
+  try {
+    await bootstrap({ skipAuth: true, skipUpdateCheck: true });
+    await runVercelAuthCheck();
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : e);
+    process.exitCode = 1;
+  }
   process.exit(process.exitCode ?? 0);
 }
 
