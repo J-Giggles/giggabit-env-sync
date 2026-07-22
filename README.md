@@ -177,6 +177,10 @@ In the **root** `package.json` of your app:
     "env:sync:push": "node scripts/giggabit-env-sync/run.mjs push",
     "env:sync:push:cli": "node scripts/giggabit-env-sync/run.mjs push --interactive",
     "env:sync:check": "node scripts/giggabit-env-sync/run.mjs check",
+    "env:sync:auth-check": "node scripts/giggabit-env-sync/run.mjs auth-check",
+    "env:sync:links": "node scripts/giggabit-env-sync/run.mjs links",
+    "env:sync:links:remote": "node scripts/giggabit-env-sync/run.mjs links --remote",
+    "env:sync:format": "node scripts/giggabit-env-sync/run.mjs format",
     "env:sync:clear": "node scripts/giggabit-env-sync/run.mjs clear",
     "deploy": "node scripts/giggabit-env-sync/run.mjs deploy",
     "deploy:staging": "pnpm deploy -- staging",
@@ -236,7 +240,32 @@ pnpm run env:sync:check -- preview -q     # prints `true` or `false` only
 # Remove hosted variables from chosen Vercel scopes and/or Convex dev or prod (interactive; local files untouched):
 pnpm run env:sync:clear
 pnpm run env:sync:clear -- --dry-run
+
+# Check Vercel user/team/project read access without printing secret values:
+pnpm run env:sync:auth-check
+
+# Show local deployment links; --remote adds read-only provider identity reports:
+pnpm run env:sync:links
+pnpm run env:sync:links:remote
 ```
+
+### Reformat local env files (`env:sync:format`)
+
+Reorders keys and preserves comments and section headers from `.env.example`.
+Values stay with their keys; keys absent from the template are appended under
+**Additional variables**. The command never calls Vercel or Convex.
+
+```bash
+pnpm run env:sync:format              # all existing target files
+pnpm run env:sync:format -- dev       # dev target files only
+pnpm run env:sync:format -- --dry-run # report changes without writing
+```
+
+| Target | Files (when they exist) |
+|--------|-------------------------|
+| `dev` | `.env.local`, `.env.development.local`, `.env.sync.development` |
+| `preview` | `.env.preview`, `.env.sync.preview` |
+| `prod` | `.env.production.local`, `.env.sync.production` |
 
 ### Deploy command
 
