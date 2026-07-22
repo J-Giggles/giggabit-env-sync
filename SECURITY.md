@@ -43,4 +43,4 @@ Replace `<remote>` with your remote name (e.g. `giggabit-env-sync`). Use **`main
 | Convex push temp | `<cache-dir>/push.convex.*` |
 | Metadata / backups | `<cache-dir>/` |
 
-`<cache-dir>` is `.env/sync/`, or `.env.sync-cache/` when root `.env` is a file. Parent app `.gitignore` should ignore `.env*` / `.env.sync.*` / `.env/sync/` / `.env.sync-cache/` (see README).
+`<cache-dir>` is `.env/sync/`, or `.env.sync-cache/` when root `.env` is a file. Parent app `.gitignore` should explicitly ignore `.env`, `.env.local`, `.env.*.local`, `.env.sync.*`, `.env/sync/`, and `.env.sync-cache/` (see README). Safe templates such as `.env.example` and `.env.template` remain committable.
