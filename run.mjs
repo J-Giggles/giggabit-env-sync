@@ -33,6 +33,7 @@ import { runToolCheck } from "./lib/upstream-check.mjs";
 import { syncInfo, syncWarn } from "./lib/cli-style.mjs";
 import { runVercelAuthCheck } from "./lib/vercel-auth.mjs";
 import { runVercelLinksReport } from "./lib/vercel-links-report.mjs";
+import { runFormatEnvFiles } from "./lib/format-env-files.mjs";
 
 const VALID = new Set(["dev", "preview", "prod"]);
 
@@ -50,6 +51,9 @@ Usage:
 
   pnpm run env:sync:links -- --remote
                         Also run read-only vercel project ls and wrangler whoami reports.
+
+  pnpm run env:sync:format [-- <dev|preview|prod>] [--dry-run]
+                        Reformat existing env files to match their example template layout.
 
   pnpm run env:sync:pull
                         Interactive: merge one scope or option 0 = pull all (same as pull -- --all);
@@ -249,6 +253,24 @@ if (cmd === "links") {
   try {
     await bootstrap({ skipAuth: true, skipUpdateCheck: true });
     await runVercelLinksReport({ remote: flags.has("--remote") });
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : e);
+    process.exitCode = 1;
+  }
+  process.exit(process.exitCode ?? 0);
+}
+
+if (cmd === "format") {
+  if (target && !VALID.has(target)) {
+    usage();
+    process.exit(1);
+  }
+  try {
+    await bootstrap({ skipAuth: true, skipUpdateCheck: true });
+    runFormatEnvFiles({
+      targets: target ? [target] : [],
+      dryRun: flags.has("--dry-run"),
+    });
   } catch (e) {
     console.error(e instanceof Error ? e.message : e);
     process.exitCode = 1;
