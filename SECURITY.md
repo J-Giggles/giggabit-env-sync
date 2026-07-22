@@ -10,7 +10,7 @@ This directory contains **only source** (Node ESM). It does **not** embed API ke
    git diff --cached --stat
    ```
 2. **Confirm no env files** — these must **not** appear in `git status` / the commit:
-   - `.env`, `.env.local`, `.env.*.local`, `.env.sync.*`, `.env/sync/`, `.env.sync-cache/`
+   - `.env`, `.env.local`, `.env.*.local`, `.env.preview`, `.env.sync.*`, `.env/sync/`, `.env.sync-cache/`
    - Any file produced by `vercel env pull` / `convex env list` (sorted dumps, caches).
 3. **Quick pattern scan** (optional):
    ```bash
@@ -43,4 +43,4 @@ Replace `<remote>` with your remote name (e.g. `giggabit-env-sync`). Use **`main
 | Convex push temp | `<cache-dir>/push.convex.*` |
 | Metadata / backups | `<cache-dir>/` |
 
-`<cache-dir>` is `.env/sync/`, or `.env.sync-cache/` when root `.env` is a file. Parent app `.gitignore` should explicitly ignore `.env`, `.env.local`, `.env.*.local`, `.env.sync.*`, `.env/sync/`, and `.env.sync-cache/` (see README). Safe templates such as `.env.example` and `.env.template` remain committable.
+`<cache-dir>` is `.env/sync/`, or `.env.sync-cache/` when root `.env` is a file. Parent app `.gitignore` should explicitly ignore `.env`, `.env.local`, `.env.*.local`, `.env.preview`, `.env.sync.*`, `.env/sync/`, and `.env.sync-cache/` (see README). Safe templates such as `.env.example` and `.env.template` remain committable.

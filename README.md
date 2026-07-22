@@ -251,9 +251,12 @@ pnpm run env:sync:links:remote
 
 ### Reformat local env files (`env:sync:format`)
 
-Reorders keys and preserves comments and section headers from `.env.example`.
-Values stay with their keys; keys absent from the template are appended under
-**Additional variables**. The command never calls Vercel or Convex.
+Reorders keys and preserves comments and section headers from the resolved example
+template. The target-specific template takes priority (`.env.development.example`,
+`.env.preview.example`, or `.env.production.example`); `.env.example` is the
+fallback. Values stay with their keys; keys absent from the template are appended
+under **Additional variables**. Before reformatting, the command removes the
+transient `VERCEL_OIDC_TOKEN` from each file. It never calls Vercel or Convex.
 
 ```bash
 pnpm run env:sync:format              # all existing target files
@@ -318,12 +321,16 @@ Ignore the sync cache (metadata, pull backups) and root sync artifacts (secrets)
 
 ```gitignore
 # giggabit-env-sync
+.env
+.env.local
+.env.*.local
+.env.preview
 .env/sync/
 .env.sync-cache/
 .env.sync.*
 ```
 
-If you already ignore `.env*`, both cache locations are usually already ignored; the lines above document intent.
+These explicit entries protect generated and working secret files without hiding safe templates such as `.env.example` and `.env.template`.
 
 ---
 
