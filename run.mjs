@@ -32,6 +32,7 @@ import { bootstrap } from "./lib/bootstrap.mjs";
 import { runToolCheck } from "./lib/upstream-check.mjs";
 import { syncInfo, syncWarn } from "./lib/cli-style.mjs";
 import { runVercelAuthCheck } from "./lib/vercel-auth.mjs";
+import { runVercelLinksReport } from "./lib/vercel-links-report.mjs";
 
 const VALID = new Set(["dev", "preview", "prod"]);
 
@@ -43,6 +44,12 @@ Usage:
 
   pnpm run env:sync:auth-check
                         Verify Vercel authentication without printing secret values.
+
+  pnpm run env:sync:links
+                        Report Vercel app and Cloudflare Worker deployment links.
+
+  pnpm run env:sync:links -- --remote
+                        Also run read-only vercel project ls and wrangler whoami reports.
 
   pnpm run env:sync:pull
                         Interactive: merge one scope or option 0 = pull all (same as pull -- --all);
@@ -231,6 +238,17 @@ if (cmd === "auth-check") {
   try {
     await bootstrap({ skipAuth: true, skipUpdateCheck: true });
     await runVercelAuthCheck();
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : e);
+    process.exitCode = 1;
+  }
+  process.exit(process.exitCode ?? 0);
+}
+
+if (cmd === "links") {
+  try {
+    await bootstrap({ skipAuth: true, skipUpdateCheck: true });
+    await runVercelLinksReport({ remote: flags.has("--remote") });
   } catch (e) {
     console.error(e instanceof Error ? e.message : e);
     process.exitCode = 1;
