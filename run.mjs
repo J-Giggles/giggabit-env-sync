@@ -8,8 +8,9 @@
  * - **`ENV_SYNC_VERCEL_PROJECT_CWD=apps/admin`** — point Vercel CLI / API at a subdirectory
  *   that owns `.vercel/project.json` (e.g. one app inside a monorepo).
  * - **`ENV_SYNC_VERCEL_PROJECTS=apps/admin,apps/website`** — when ≥ 2 entries, `push` /
- *   `check` / `deploy` loop the same operation across every project. `pull` and `clear`
- *   stay single-project (use `--project=<rel>` to choose which).
+ *   `check` / `deploy` loop the same operation across every project, while `pull --all`
+ *   validates and merges every project before writing. Interactive/single-target pull and
+ *   `clear` stay on the active project (use `--project=<rel>` to choose which).
  *
  * Per-invocation `--project=<rel>` overrides any monorepo loop and pins to one project.
  */
@@ -30,6 +31,9 @@ import { deployTarget, parseDeployArgs } from "./lib/deploy.mjs";
 import { bootstrap } from "./lib/bootstrap.mjs";
 import { runToolCheck } from "./lib/upstream-check.mjs";
 import { syncInfo, syncWarn } from "./lib/cli-style.mjs";
+import { runVercelAuthCheck } from "./lib/vercel-auth.mjs";
+import { runVercelLinksReport } from "./lib/vercel-links-report.mjs";
+import { runFormatEnvFiles } from "./lib/format-env-files.mjs";
 
 const VALID = new Set(["dev", "preview", "prod"]);
 
@@ -38,6 +42,18 @@ function usage() {
 Usage:
   pnpm run env:sync:tool-check
                         Verify vendored tool matches J-Giggles/giggabit-env-sync hub (UPSTREAM.json).
+
+  pnpm run env:sync:auth-check
+                        Verify Vercel authentication without printing secret values.
+
+  pnpm run env:sync:links
+                        Report Vercel app and Cloudflare Worker deployment links.
+
+  pnpm run env:sync:links -- --remote
+                        Also run read-only vercel project ls and wrangler whoami reports.
+
+  pnpm run env:sync:format [-- <dev|preview|prod>] [--dry-run]
+                        Reformat existing env files to match their example template layout.
 
   pnpm run env:sync:pull
                         Interactive: merge one scope or option 0 = pull all (same as pull -- --all);
@@ -104,11 +120,11 @@ Usage:
   --missing-only    (pull) Add host keys missing from the local file; never overwrite existing local values.
                     (push) Push only non-empty local keys absent on Convex/Vercel; never update existing remote values.
 
-  --project=<rel>   (push/check/clear/deploy) Pin this invocation to a single Vercel project
+  --project=<rel>   (pull/push/check/clear/deploy) Pin this invocation to a single Vercel project
                         directory relative to repo root (e.g. \`apps/admin\`). Overrides
                         ENV_SYNC_VERCEL_PROJECT_CWD and any monorepo loop.
 
-  --all-projects    (push/check) Loop the operation across every project listed in
+  --all-projects    (pull --all/push/check/deploy) Select every project listed in
                         ENV_SYNC_VERCEL_PROJECTS (defaults to true when ≥ 2 are configured).
 
   Deploy flags:
@@ -125,7 +141,7 @@ Usage:
 
 Requires: Vercel CLI (\`vercel\` on PATH or pnpm dlx), linked project, and auth.
 With Convex enabled (default): Convex CLI (pnpm) and Convex auth.
-Snapshots: .env/sync/metadata.json (gitignored)
+Cache metadata: .env/sync/metadata.json, or .env.sync-cache/metadata.json when root .env is a file (gitignored)
 `);
 }
 
@@ -222,6 +238,46 @@ if (cmd === "tool-check") {
   process.exit(process.exitCode ?? 0);
 }
 
+if (cmd === "auth-check") {
+  try {
+    await bootstrap({ skipAuth: true, skipUpdateCheck: true });
+    await runVercelAuthCheck();
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : e);
+    process.exitCode = 1;
+  }
+  process.exit(process.exitCode ?? 0);
+}
+
+if (cmd === "links") {
+  try {
+    await bootstrap({ skipAuth: true, skipUpdateCheck: true });
+    await runVercelLinksReport({ remote: flags.has("--remote") });
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : e);
+    process.exitCode = 1;
+  }
+  process.exit(process.exitCode ?? 0);
+}
+
+if (cmd === "format") {
+  if (target && !VALID.has(target)) {
+    usage();
+    process.exit(1);
+  }
+  try {
+    await bootstrap({ skipAuth: true, skipUpdateCheck: true });
+    runFormatEnvFiles({
+      targets: target ? [target] : [],
+      dryRun: flags.has("--dry-run"),
+    });
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : e);
+    process.exitCode = 1;
+  }
+  process.exit(process.exitCode ?? 0);
+}
+
 if (
   !cmd ||
   (cmd === "push" && !pushAll && !pushInteractive && (!target || !VALID.has(target)))
@@ -279,7 +335,10 @@ try {
           "Ignoring preset target with --all; use one or the other."
         );
       }
-      await pullAllVercelDeployments({ missingOnly });
+      await pullAllVercelDeployments({
+        missingOnly,
+        projects: shouldLoopProjects ? monorepoProjects : null,
+      });
     } else if (!target) {
       await interactivePull({ snapshotOnly, missingOnly });
     } else {

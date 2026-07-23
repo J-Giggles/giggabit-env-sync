@@ -105,12 +105,12 @@ All configuration is read from environment variables. Set them in `package.json`
 |----------|---------|--------|
 | `ENV_SYNC_DISABLE_CONVEX` | unset | When `1` / `true` / `yes`: skip every Convex CLI call. `pull` / `push` / `check` / `clear` / `deploy` operate on Vercel only. Required for projects without a Convex backend. |
 | `ENV_SYNC_VERCEL_PROJECT_CWD` | `""` (REPO_ROOT) | Relative path (from repo root) to the directory that owns `.vercel/project.json`. Use this when the Vercel-linked project lives in a subdirectory (e.g. `apps/admin`). |
-| `ENV_SYNC_VERCEL_PROJECTS` | unset | Comma-separated list of relative paths. When ≥ 2 entries, `push` / `check` / `deploy` loop the operation across every project, sharing the same `.env.sync.*` snapshot. Each iteration sets `ENV_SYNC_VERCEL_PROJECT_CWD` internally. `pull` and `clear` stay single-project (use `--project=<rel>` to pick one). |
+| `ENV_SYNC_VERCEL_PROJECTS` | unset | Comma-separated list of relative paths. When ≥ 2 entries, `push` / `check` / `deploy` loop across every project. `pull --all` validates and fetches every configured project when multi-project mode is active or `--all-projects` is supplied, then writes one merged snapshot per deployment target; later projects win duplicate keys. Interactive or single-target `pull` and `clear` stay on the active project. Use `--project=<rel>` to pin any invocation to one project. |
 | `ENV_SYNC_VERCEL_PREVIEW_BRANCH` | `staging` | Git branch used to scope Vercel Preview env vars. |
 | `ENV_SYNC_VERCEL_PREVIEW_NO_BRANCH` | unset | When `1`: Preview env vars are unscoped (apply to all preview deployments). |
 | `ENV_SYNC_VERCEL_CONCURRENCY` | `8` | Vercel REST API concurrency for env upserts. |
 | `ENV_SYNC_VERCEL_TEAM_ID` | unset | Vercel team id for REST API (often set via `giggabit-env-sync.repo.json` or `.env.local`). |
-| `ENV_SYNC_VERCEL_AUTH_FILE` | unset | Repo-local Vercel CLI auth JSON (e.g. `.env/sync/vercel.auth.json`), gitignored. |
+| `ENV_SYNC_VERCEL_AUTH_FILE` | unset | Repo-local Vercel CLI auth JSON (e.g. `.env/sync/vercel.auth.json`, or `.env.sync-cache/vercel.auth.json` when root `.env` is a file), gitignored. |
 | `ENV_SYNC_ALLOW_GLOBAL_VERCEL_AUTH` | unset | When `1`: allow global `vercel login` token even if `giggabit-env-sync.repo.json` defines a team guard. |
 | `ENV_SYNC_SKIP_UPDATE_CHECK` | unset | When `1`: skip `UPSTREAM.json` vs hub `master` freshness check. |
 
@@ -121,7 +121,7 @@ Repo root **`giggabit-env-sync.repo.json`** supplies defaults for team, projects
 | Flag | Effect |
 |------|--------|
 | `--project=<rel>` | Pin a single invocation to one Vercel project; overrides `ENV_SYNC_VERCEL_PROJECT_CWD` and any monorepo loop. |
-| `--all-projects` | Force the monorepo loop on `push` / `check` even with only one entry in `ENV_SYNC_VERCEL_PROJECTS`. |
+| `--all-projects` | Force configured-project selection for `pull --all`, `push`, `check`, or `deploy` even with only one entry in `ENV_SYNC_VERCEL_PROJECTS`. |
 | `--no-update-check` | Skip hub freshness check (`UPSTREAM.json` vs `J-Giggles/giggabit-env-sync`). |
 | `--missing-only` | Pull: add host keys missing locally. Push: add non-empty local keys missing on host. |
 
@@ -152,13 +152,17 @@ Repo root **`giggabit-env-sync.repo.json`** supplies defaults for team, projects
 ```json
 {
   "scripts": {
-    "env:sync:pull": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECT_CWD=apps/admin node scripts/giggabit-env-sync/run.mjs pull",
+    "env:sync:pull": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECTS=apps/admin,apps/website node scripts/giggabit-env-sync/run.mjs pull --all",
     "env:sync:push": "ENV_SYNC_DISABLE_CONVEX=1 ENV_SYNC_VERCEL_PROJECTS=apps/admin,apps/website node scripts/giggabit-env-sync/run.mjs push"
   }
 }
 ```
 
-`pull` reads from one project (the snapshot is shared); `push` loops both.
+`pull --all` first validates both project links, then reads each project in the
+declared order and writes merged development/preview/production snapshots only
+after every read succeeds. If both projects define a key, the later project wins.
+Use `--project=apps/admin` for a one-project pull. Interactive and single-target
+pulls remain scoped to that active project; `push` loops both projects.
 
 ---
 
@@ -173,6 +177,10 @@ In the **root** `package.json` of your app:
     "env:sync:push": "node scripts/giggabit-env-sync/run.mjs push",
     "env:sync:push:cli": "node scripts/giggabit-env-sync/run.mjs push --interactive",
     "env:sync:check": "node scripts/giggabit-env-sync/run.mjs check",
+    "env:sync:auth-check": "node scripts/giggabit-env-sync/run.mjs auth-check",
+    "env:sync:links": "node scripts/giggabit-env-sync/run.mjs links",
+    "env:sync:links:remote": "node scripts/giggabit-env-sync/run.mjs links --remote",
+    "env:sync:format": "node scripts/giggabit-env-sync/run.mjs format",
     "env:sync:clear": "node scripts/giggabit-env-sync/run.mjs clear",
     "deploy": "node scripts/giggabit-env-sync/run.mjs deploy",
     "deploy:staging": "pnpm deploy -- staging",
@@ -232,7 +240,35 @@ pnpm run env:sync:check -- preview -q     # prints `true` or `false` only
 # Remove hosted variables from chosen Vercel scopes and/or Convex dev or prod (interactive; local files untouched):
 pnpm run env:sync:clear
 pnpm run env:sync:clear -- --dry-run
+
+# Check Vercel user/team/project read access without printing secret values:
+pnpm run env:sync:auth-check
+
+# Show local deployment links; --remote adds read-only provider identity reports:
+pnpm run env:sync:links
+pnpm run env:sync:links:remote
 ```
+
+### Reformat local env files (`env:sync:format`)
+
+Reorders keys and preserves comments and section headers from the resolved example
+template. The target-specific template takes priority (`.env.development.example`,
+`.env.preview.example`, or `.env.production.example`); `.env.example` is the
+fallback. Values stay with their keys; keys absent from the template are appended
+under **Additional variables**. Before reformatting, the command removes the
+transient `VERCEL_OIDC_TOKEN` from each file. It never calls Vercel or Convex.
+
+```bash
+pnpm run env:sync:format              # all existing target files
+pnpm run env:sync:format -- dev       # dev target files only
+pnpm run env:sync:format -- --dry-run # report changes without writing
+```
+
+| Target | Files (when they exist) |
+|--------|-------------------------|
+| `dev` | `.env.local`, `.env.development.local`, `.env.sync.development` |
+| `preview` | `.env.preview`, `.env.sync.preview` |
+| `prod` | `.env.production.local`, `.env.sync.production` |
 
 ### Deploy command
 
@@ -258,7 +294,7 @@ By default deploy reads `.env.sync.preview` / `.env.sync.production`; run `pnpm 
 
 CLI output uses ANSI colors for the `[env:sync]` prefix (no extra npm dependencies).
 
-**Where pull writes:** (1) full merged snapshot → **`.env.sync.merge.<target>`** (sorted keys, for diffing); (2) the same merge (minus ephemeral `VERCEL_OIDC_TOKEN`) → **working file** with optional **example layout**: if **`.env.example`** or a target-specific `*.example` exists (see below), comments and key order follow that file; any extra keys from Convex/Vercel are appended at the **bottom** after a short header. Otherwise keys are written sorted. **`--all`** also writes **`.env.sync.development`**, **`.env.sync.preview`**, **`.env.sync.production`** (merged + formatted). **Ephemeral** (not for editing): **`vercel env pull`** writes **`.env/sync/cache.vercel.<env>.env`** and deletes it after parsing; **`env:sync:push`** writes **`.env/sync/push.convex.<target>.env`** for `convex env set --from-file` and removes it after the command. Older tool versions left **`.env.sync.cache.*`** / **`.env.sync.push.*`** at the repo root — safe to delete those files.
+**Where pull writes:** (1) full merged snapshot → **`.env.sync.merge.<target>`** (sorted keys, for diffing); (2) a deliberately filtered and normalized projection of that merge → **working file**. The projection currently omits ephemeral and Vercel auto-injected keys, Turbo/Nx tool noise, and Convex keys when Convex is disabled; it also drops redundant legacy aliases when their canonical keys exist and normalizes `CONVEX_DEPLOYMENT`. See `filterMergedForLocalWorkspace` for the canonical rules as they evolve. With optional **example layout**, if **`.env.example`** or a target-specific `*.example` exists (see below), comments and key order follow that file; any extra keys from Convex/Vercel are appended at the **bottom** after a short header. Otherwise keys are written sorted. **`--all`** also writes **`.env.sync.development`**, **`.env.sync.preview`**, **`.env.sync.production`** (merged + formatted). **Ephemeral** (not for editing): **`vercel env pull`** writes **`<cache-dir>/cache.vercel.<env>.env`** and deletes it after parsing; **`env:sync:push`** writes **`<cache-dir>/push.convex.<target>.env`** for `convex env set --from-file` and removes it after the command. The cache directory is **`.env/sync/`**, or **`.env.sync-cache/`** when the root **`.env`** path is a file. Older tool versions left **`.env.sync.cache.*`** / **`.env.sync.push.*`** at the repo root — safe to delete those files.
 
 | Target | Example template (first file that exists) |
 |--------|---------------------------------------------|
@@ -266,7 +302,7 @@ CLI output uses ANSI colors for the `[env:sync]` prefix (no extra npm dependenci
 | `preview` | `.env.preview.example`, then `.env.example` |
 | `prod` | `.env.production.example`, then `.env.example` |
 
-**Working file paths:** **dev** → `.env.local` / `.env.development.local`; **preview** → `.env.preview` only; **prod** → `.env.production.local` only. Backups under **`.env/sync/pull-backups/`**. **`--snapshot-only`** skips working files. **`env:sync:push`** uses **What gets synced** paths.
+**Working file paths:** **dev** → `.env.local` / `.env.development.local`; **preview** → `.env.preview` only; **prod** → `.env.production.local` only. Backups live under **`<cache-dir>/pull-backups/`** using the cache-directory rule above. **`--snapshot-only`** skips working files. **`env:sync:push`** uses **What gets synced** paths.
 
 ### Troubleshooting
 
@@ -285,11 +321,16 @@ Ignore the sync cache (metadata, pull backups) and root sync artifacts (secrets)
 
 ```gitignore
 # giggabit-env-sync
+.env
+.env.local
+.env.*.local
+.env.preview
 .env/sync/
+.env.sync-cache/
 .env.sync.*
 ```
 
-If you already ignore `.env*`, the `.env/sync/` directory is usually already ignored; the line above documents intent.
+These explicit entries protect generated and working secret files without hiding safe templates such as `.env.example` and `.env.template`.
 
 ---
 
@@ -342,7 +383,7 @@ Add `--cmd-url-env-var-name …` only if the CLI cannot infer your framework’s
 
 1. **Install files** using Option A, B, or C above; keep paths as `scripts/giggabit-env-sync/…` so the `package.json` snippets match.
 2. **Merge `package.json` scripts** — avoid duplicate keys; if you already have `env:sync:*`, rename or merge.
-3. **`.gitignore`** — add `.env/sync/` if not already covered.
+3. **`.gitignore`** — add `.env/sync/` and `.env.sync-cache/` if not already covered.
 4. **Convex / Vercel already configured:** run **`env:sync:pull`** for each target you use (`dev`, `preview`, `prod`) **before** the first **`env:sync:push`**, so local metadata matches hosted env and you get fewer drift warnings.
 5. **Customize** `lib/split.mjs` if your app puts different keys on Convex vs Vercel (e.g. more `NEXT_PUBLIC_*` rules).
 6. **CI:** do not print env values in logs; keep `CONVEX_DEPLOY_KEY` only in the CI secret store / Vercel.
@@ -363,7 +404,7 @@ Use this when adding giggabit-env-sync to a **new or existing** app repo (LifePa
 2. **Install tool**: `git subtree add --prefix=scripts/giggabit-env-sync giggabit-env-sync master --squash` (or `env:sync:tool-update` after an initial copy)
 3. **Commit** [`giggabit-env-sync.repo.json`](../../giggabit-env-sync.repo.json) at the **repo root** — `vercelTeamId`, `vercelTeamSlug`, `vercelProjects`, `disableConvex`, `previewBranch` (no secrets)
 4. **PR in that repo only**: `package.json` `env:sync:*` scripts, `vercel link` per app, root `.env.example` vars
-5. **Developer machine**: `VERCEL_TOKEN` in root `.env.local` for the **correct Vercel account/team** (or `ENV_SYNC_VERCEL_AUTH_FILE=.env/sync/vercel.auth.json`)
+5. **Developer machine**: `VERCEL_TOKEN` in root `.env.local` for the **correct Vercel account/team** (or `ENV_SYNC_VERCEL_AUTH_FILE` pointing to a gitignored auth JSON)
 6. **Before pull/push**: `pnpm run env:sync:tool-check` (compares `UPSTREAM.json` to hub `master`)
 7. **Pull**: `pnpm run env:sync:pull` (interactive table) or `pnpm run env:sync:pull -- --all --missing-only`
 
@@ -385,7 +426,7 @@ git subtree pull --prefix=scripts/giggabit-env-sync giggabit-env-sync feat/my-br
 **Per-repo Vercel login**
 
 - Set `VERCEL_TOKEN` in root `.env.local` (loaded by the CLI before commands).
-- Optional `ENV_SYNC_VERCEL_AUTH_FILE` for a repo-local auth JSON (gitignored under `.env/sync/`).
+- Optional `ENV_SYNC_VERCEL_AUTH_FILE` for a repo-local auth JSON (gitignored under `.env/sync/`, or `.env.sync-cache/` when root `.env` is a file).
 - When `giggabit-env-sync.repo.json` defines `vercelTeamId` / `vercelTeamSlug`, global `vercel login` is **not** used unless `ENV_SYNC_ALLOW_GLOBAL_VERCEL_AUTH=1`.
 
 ---
