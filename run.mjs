@@ -28,6 +28,7 @@ import { interactivePushCli } from "./lib/interactive-push-cli.mjs";
 import { interactiveClear } from "./lib/clear.mjs";
 import { deployTarget, parseDeployArgs } from "./lib/deploy.mjs";
 import { syncMergeTarget } from "./lib/sync-merge.mjs";
+import { reformatSyncFiles } from "./lib/reformat-sync.mjs";
 import { syncInfo, syncWarn } from "./lib/cli-style.mjs";
 
 const VALID = new Set(["dev", "preview", "prod"]);
@@ -82,6 +83,11 @@ Usage:
                         Interactive: choose Vercel (dev/preview/prod) and/or Convex (dev/prod) to remove
                         hosted variables. --dry-run lists removals only. Convex options hidden when
                         Convex is disabled.
+
+  pnpm run env:sync:reformat [-- --dry-run] [--include-merge] [.env.sync.…]
+                        Rewrite local .env.sync.* files to match .env.example layout.
+                        Template keys keep section order; extras move to the end.
+                        Logs key names and counts only — never prints secret values.
 
   pnpm run deploy -- <staging|production>
                         Run gates, sync env, deploy Convex (if enabled), then deploy Vercel directly.
@@ -224,6 +230,8 @@ if (
   process.exit();
 }
 
+// `reformat` / `clear` / `deploy` validate their own args below.
+
 if (cmd === "pull" && target && !VALID.has(target)) {
   usage();
   process.exitCode = 1;
@@ -267,7 +275,10 @@ if (shouldLoopProjects) {
 }
 
 try {
-  if (cmd === "clear") {
+  if (cmd === "reformat") {
+    const reformatArgs = rawWithoutProject.slice(1);
+    await reformatSyncFiles(reformatArgs);
+  } else if (cmd === "clear") {
     await interactiveClear({ dryRun: flags.has("--dry-run") });
   } else if (cmd === "pull") {
     if (pullAll) {
